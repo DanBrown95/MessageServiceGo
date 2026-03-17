@@ -1,0 +1,90 @@
+version: 2.1
+
+orbs:
+  aws-ecr: circleci/aws-ecr@9.3.1
+  aws-cli: circleci/aws-cli@4.0
+
+jobs:
+  checkout_src:
+    docker:
+      - image: alpine/git
+    steps:
+      - checkout
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .
+
+  deploy-ecs: &deploy_ecs
+    docker:
+      - image: cimg/python:3.9.1
+    steps:
+      - aws-cli/install
+      - aws-cli/setup
+      - attach_workspace:
+          at: .
+      - run:
+          name: Generate task definition
+          command: |
+            envsubst < TaskDefinitionTemplate.json > task-definition.json
+      - run:
+          name: Register ECS Task Definition
+          command: |
+            TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://task-definition.json --output text --query 'taskDefinition.taskDefinitionArn')
+            echo "Registered task definition: ${TASK_DEF_ARN}"
+            echo "export TASK_DEF_ARN='${TASK_DEF_ARN}'" >> $BASH_ENV
+      - run:
+          name: Update Service
+          command: |
+            echo "taskdefarn: ${TASK_DEF_ARN}"
+            aws ecs update-service --cluster "${SERVICE}" --service "${SERVICE}-${ENV}" --task-definition "${TASK_DEF_ARN}"
+            echo "Updated service to definition: ${TASK_DEF_ARN}"
+
+  deploy_development:
+    <<: *deploy_ecs
+    environment:
+      - SERVICE: MessageService
+      - ENV: development
+      - CPU: 256
+      - MEMORY: 512
+
+  deploy_production:
+    <<: *deploy_ecs
+    environment:
+      - SERVICE: MessageService
+      - ENV: production
+      - CPU: 256
+      - MEMORY: 512
+
+workflows:
+  version: 2
+  build_and_deploy:
+    jobs:
+      - checkout_src
+      - aws-ecr/build_and_push_image:
+          auth:
+            - aws-cli/setup
+          repo: messageservice
+          account_id: $AWS_ACCOUNT_ID
+          tag: $CIRCLE_SHA1
+          workspace_root: .
+          attach_workspace: true
+          dockerfile: Dockerfile
+          path: .
+          extra_build_args: '--provenance=false'
+          requires:
+            - checkout_src
+      - deploy_development_approval:
+          type: approval
+          requires:
+            - aws-ecr/build_and_push_image
+      - deploy_development:
+          requires:
+            - deploy_development_approval
+      - deploy_production_approval:
+          type: approval
+          requires:
+            - deploy_development
+      - deploy_production:
+          requires:
+            - deploy_production_approval

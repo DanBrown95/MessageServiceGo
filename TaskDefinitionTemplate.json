@@ -1,0 +1,27 @@
+{
+  "family": "MessageService-${ENV}",
+  "containerDefinitions": [
+    {
+      "name": "MessageService",
+      "image": "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/messageservice:${CIRCLE_SHA1}",
+      "portMappings": [],
+      "cpu": ${CPU},
+      "memory": ${MEMORY},
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/MessageService-${ENV}",
+          "awslogs-create-group": "true",
+          "awslogs-region": "us-east-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "environment": [
+        {
+          "name": "ENV",
+          "value": "${ENV}"
+        }
+      ]
+    }
+  ]
+}
