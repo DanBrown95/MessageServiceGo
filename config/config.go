@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	figgy "github.com/DanBrown95/go-figgy"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 	"github.com/aws/aws-sdk-go/service/ssm"
@@ -21,6 +22,7 @@ type Config struct {
 	SqlAddress                       string          `mapstructure:"SqlAddress"`
 	MonitorAPIAddress                string          `mapstructure:"MonitorAPIAddress"`
 	ProcessingPollingIntervalSeconds int             `mapstructure:"ProcessingPollingIntervalSeconds"`
+	AWSRegion                        string          `mapstructure:"AWSRegion"`
 	MessageSettings                  MessageSettings `mapstructure:"MessageSettings"`
 }
 
@@ -43,9 +45,11 @@ func loadSSMConfig(env string) {
 
 	ssmClient := ssm.New(session.Must(session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
+		Config:            aws.Config{Region: aws.String(AppConfig.AWSRegion)},
 	})))
 	secretManagerClient := secretsmanager.New(session.Must(session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
+		Config:            aws.Config{Region: aws.String(AppConfig.AWSRegion)},
 	})))
 
 	err := figgy.LoadWithParameters(ssmClient, secretManagerClient, &AppConfig, params)
