@@ -19,7 +19,7 @@ type MessageSettings struct {
 }
 
 type Config struct {
-	SqlAddress                       string          `mapstructure:"SqlAddress"`
+	SqlAddress                       string          `mapstructure:"SqlAddress" ssm:"/rerolldrinks/{{.Env}}/sql/conn"`
 	MonitorAPIAddress                string          `mapstructure:"MonitorAPIAddress"`
 	ProcessingPollingIntervalSeconds int             `mapstructure:"ProcessingPollingIntervalSeconds"`
 	AWSRegion                        string          `mapstructure:"AWSRegion"`
@@ -31,16 +31,21 @@ var AppConfig Config
 func getEnvOrDefault() string {
 	env := os.Getenv("ENV")
 	if env == "" {
-		env = "development"
+		env = "local"
 	}
 	return env
 }
 
 func loadSSMConfig(env string) {
+	ssmEnv := strings.ToLower(env)
+	if ssmEnv == "local" {
+		ssmEnv = "development"
+	}
+
 	params := struct {
 		Env string
 	}{
-		Env: strings.ToLower(env),
+		Env: ssmEnv,
 	}
 
 	ssmClient := ssm.New(session.Must(session.NewSessionWithOptions(session.Options{
@@ -52,10 +57,16 @@ func loadSSMConfig(env string) {
 		Config:            aws.Config{Region: aws.String(AppConfig.AWSRegion)},
 	})))
 
+	localSqlAddress := AppConfig.SqlAddress
+
 	err := figgy.LoadWithParameters(ssmClient, secretManagerClient, &AppConfig, params)
 	if err != nil {
 		println("Failed to load config from SSM/Secrets Manager:", err.Error())
 		os.Exit(1)
+	}
+
+	if env == "local" {
+		AppConfig.SqlAddress = localSqlAddress
 	}
 }
 
@@ -68,13 +79,12 @@ func LoadConfig() error {
 	}
 
 	env := getEnvOrDefault()
-	if env != "local" {
-		viper.SetConfigName(fmt.Sprintf("appsettings.%s", strings.ToLower(env)))
-		viper.AddConfigPath("./config")
-		if err := viper.MergeInConfig(); err != nil {
-			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-				return fmt.Errorf("fatal error reading config for %s: %w", env, err)
-			}
+
+	viper.SetConfigName(fmt.Sprintf("appsettings.%s", strings.ToLower(env)))
+	viper.AddConfigPath("./config")
+	if err := viper.MergeInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return fmt.Errorf("fatal error reading config for %s: %w", env, err)
 		}
 	}
 

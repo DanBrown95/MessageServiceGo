@@ -24,7 +24,7 @@ func main() {
 	}
 
 	env := os.Getenv("ENV")
-	if env == "development" || env == "" {
+	if env == "local" || env == "" {
 		log.Logger = zerolog.New(zerolog.ConsoleWriter{
 			Out:        os.Stdout,
 			TimeFormat: time.RFC3339,
